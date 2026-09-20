@@ -19,6 +19,7 @@ from app.database import get_db
 from app.models import RunProjection
 from app.schemas import (
     AbortRunCommand,
+    ArtifactLedgerItemOut,
     AttachArtifactCommand,
     CompleteRunCommand,
     EventOut,
@@ -28,7 +29,10 @@ from app.schemas import (
     RunOut,
     StartRunCommand,
     TokenResponse,
+    VerificationResultOut,
+    VerifyArtifactRequest,
 )
+from app.verification import list_artifacts, verify_artifact
 
 router = APIRouter(prefix="/api")
 
@@ -224,3 +228,22 @@ def get_lineage(
         started_by=proj.started_by,
         version=proj.version,
     )
+
+
+@router.get("/artifacts", response_model=list[ArtifactLedgerItemOut])
+def get_artifact_ledger(
+    db: Session = Depends(get_db),
+    _user: dict = Depends(get_current_user),
+):
+    """产物台账：跨 Run 列出已挂载产物（研究员、审计员均可查看）。"""
+    return list_artifacts(db)
+
+
+@router.post("/artifacts/verify", response_model=VerificationResultOut)
+def post_verify_artifact(
+    body: VerifyArtifactRequest,
+    db: Session = Depends(get_db),
+    _user: dict = Depends(require_researcher),
+):
+    """校验单条产物指纹（仅研究员可执行；审计员只读台账）。"""
+    return verify_artifact(db, run_id=body.run_id, artifact_index=body.artifact_index)

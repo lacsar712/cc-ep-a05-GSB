@@ -98,3 +98,37 @@ class LineageOut(BaseModel):
     finished_at: datetime | None
     started_by: str
     version: int
+
+
+class ArtifactLedgerItemOut(BaseModel):
+    run_id: UUID
+    project: str
+    run_name: str
+    run_status: str
+    name: str | None
+    uri: str
+    content_sha256: str
+    media_type: str | None
+    attached_at: datetime | None
+    attached_by: str | None
+    artifact_index: int
+
+    model_config = {"from_attributes": True}
+
+
+class VerifyArtifactRequest(BaseModel):
+    run_id: UUID
+    artifact_index: int = Field(ge=0)
+
+
+class VerificationCheckOut(BaseModel):
+    key: str
+    label: str
+    passed: bool
+    detail: str
+
+
+class VerificationResultOut(BaseModel):
+    passed: bool
+    checks: list[VerificationCheckOut]
+    message: str

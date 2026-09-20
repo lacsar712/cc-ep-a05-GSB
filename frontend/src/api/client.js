@@ -77,4 +77,17 @@ export async function getLineage(id) {
   return data
 }
 
+export async function listArtifacts() {
+  const { data } = await api.get('/artifacts')
+  return data
+}
+
+export async function verifyArtifact(runId, artifactIndex) {
+  const { data } = await api.post('/artifacts/verify', {
+    run_id: runId,
+    artifact_index: artifactIndex,
+  })
+  return data
+}
+
 export default api
