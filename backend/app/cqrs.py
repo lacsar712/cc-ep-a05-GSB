@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID, uuid4
@@ -317,3 +318,77 @@ def rebuild_projection_from_events(db: Session, run_id: UUID) -> RunProjection |
     for event in events:
         proj = _apply_event_to_projection(proj, event)
     return proj
+
+
+SHA256_HEX_RE = re.compile(r"^[0-9a-f]{64}$")
+
+
+def list_artifacts(db: Session) -> list[dict[str, Any]]:
+    """跨 Run 汇总已挂载产物（读模型）。"""
+    runs = list(db.scalars(select(RunProjection).order_by(RunProjection.started_at.desc())).all())
+    ledger: list[dict[str, Any]] = []
+    for run in runs:
+        for artifact in run.artifacts_json or []:
+            ledger.append(
+                {
+                    "run_id": run.id,
+                    "project": run.project,
+                    "run_name": run.name,
+                    "run_status": run.status,
+                    "name": artifact.get("name"),
+                    "uri": artifact.get("uri"),
+                    "content_sha256": artifact.get("content_sha256"),
+                    "media_type": artifact.get("media_type"),
+                    "attached_at": artifact.get("attached_at"),
+                    "actor": artifact.get("actor"),
+                }
+            )
+    return ledger
+
+
+def _find_artifact(db: Session, run_id: UUID, uri: str) -> tuple[RunProjection, dict[str, Any]] | None:
+    proj = _get_projection(db, run_id)
+    if proj is None:
+        return None
+    for artifact in proj.artifacts_json or []:
+        if artifact.get("uri") == uri:
+            return proj, artifact
+    return None
+
+
+def verify_artifact(db: Session, *, run_id: UUID, uri: str) -> dict[str, Any]:
+    """校验单条产物指纹：至少校验 sha 非空与 sha256 十六进制格式。"""
+    found = _find_artifact(db, run_id, uri)
+    if found is None:
+        raise DomainError("产物不存在", status_code=404)
+
+    proj, artifact = found
+    sha = artifact.get("content_sha256") or ""
+
+    checks: list[dict[str, Any]] = []
+
+    non_empty = bool(sha.strip())
+    checks.append(
+        {
+            "name": "指纹非空",
+            "passed": non_empty,
+            "detail": "content_sha256 非空" if non_empty else "content_sha256 为空",
+        }
+    )
+
+    valid_format = bool(SHA256_HEX_RE.match(sha.strip()))
+    checks.append(
+        {
+            "name": "SHA-256 格式",
+            "passed": valid_format,
+            "detail": "64 位十六进制字符串，格式正确" if valid_format else "不是 64 位十六进制 SHA-256 指纹",
+        }
+    )
+
+    return {
+        "passed": all(c["passed"] for c in checks),
+        "run_id": proj.id,
+        "uri": uri,
+        "content_sha256": sha,
+        "checks": checks,
+    }

@@ -11,14 +11,18 @@ from app.cqrs import (
     abort_run,
     attach_artifact,
     complete_run,
+    list_artifacts,
     list_events,
     record_metric,
     start_run,
+    verify_artifact,
 )
 from app.database import get_db
 from app.models import RunProjection
 from app.schemas import (
     AbortRunCommand,
+    ArtifactOut,
+    ArtifactVerifyOut,
     AttachArtifactCommand,
     CompleteRunCommand,
     EventOut,
@@ -28,6 +32,7 @@ from app.schemas import (
     RunOut,
     StartRunCommand,
     TokenResponse,
+    VerifyArtifactCommand,
 )
 
 router = APIRouter(prefix="/api")
@@ -53,6 +58,28 @@ def login(body: LoginRequest):
         role=user["role"],
         username=user["username"],
     )
+
+
+@router.get("/artifacts", response_model=list[ArtifactOut])
+def get_artifacts(
+    db: Session = Depends(get_db),
+    _user: dict = Depends(get_current_user),
+):
+    """产物台账：跨 Run 列出已挂载产物（研究员、审计员均可查看）。"""
+    return list_artifacts(db)
+
+
+@router.post("/artifacts/verify", response_model=ArtifactVerifyOut)
+def post_verify_artifact(
+    body: VerifyArtifactCommand,
+    db: Session = Depends(get_db),
+    _user: dict = Depends(require_researcher),
+):
+    """研究员对单条产物执行指纹校验。"""
+    try:
+        return verify_artifact(db, run_id=body.run_id, uri=body.uri)
+    except DomainError as exc:
+        _handle_domain(exc)
 
 
 @router.get("/runs", response_model=list[RunOut])

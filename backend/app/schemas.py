@@ -71,6 +71,38 @@ class RunOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ArtifactOut(BaseModel):
+    run_id: UUID
+    project: str
+    run_name: str
+    run_status: str
+    name: str
+    uri: str
+    content_sha256: str
+    media_type: str | None
+    attached_at: datetime | None
+    actor: str | None
+
+
+class VerifyArtifactCommand(BaseModel):
+    run_id: UUID
+    uri: str = Field(min_length=1, max_length=1024)
+
+
+class ArtifactCheckResult(BaseModel):
+    name: str
+    passed: bool
+    detail: str
+
+
+class ArtifactVerifyOut(BaseModel):
+    passed: bool
+    run_id: UUID
+    uri: str
+    content_sha256: str
+    checks: list[ArtifactCheckResult]
+
+
 class EventOut(BaseModel):
     id: UUID
     aggregate_id: UUID
